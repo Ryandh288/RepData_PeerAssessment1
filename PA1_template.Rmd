@@ -1,25 +1,295 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research: Project 1"
+author: "Ryan Honomichl"
+date: "August 14, 2016"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+## Load libraries; loading and preprocessing the data
+
+```{r, echo=TRUE, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(mice)
+```
+
+```{r, echo=TRUE, message = FALSE}
+
+if(dir.exists("C:/Users/Ryan Honomichl/Dropbox/Coursera/5_Reproducible_Research/Week_2/project")) { 
+  
+  setwd("C:/Users/Ryan Honomichl/Dropbox/Coursera/5_Reproducible_Research/Week_2/project")
+  
+}else{
+  
+  dir.create("C:/Users/Ryan Honomichl/Dropbox/Coursera/5_Reproducible_Research/Week_2/project")
+  
+  setwd("C:/Users/Ryan Honomichl/Dropbox/Coursera/5_Reproducible_Research/Week_2/project")
+}
+
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+
+download.file(fileUrl,destfile="./Dataset.zip")
+
+unzip(zipfile="Dataset.zip")
+
+activity.raw <- read.csv("./activity.csv", header=TRUE, sep=",")
+
+```
+
+### Check structure of data frame
+
+```{r, echo=TRUE}
+str(activity.raw)
+```
+
+NOTE: date as factor
+
+```{r, echo=TRUE}
+activity.raw$date <- as.Date(activity.raw$date, "%Y-%m-%d")
+```
+
+```{r, echo=TRUE}
+str(activity.raw)
+```
+
+Note: Now date is a date variable
+
+## Calculate the total number of steps taken per day (ignoring NAs)
+
+```{r, echo=TRUE}
+steps.sum <- activity.raw %>% 
+  filter(!is.na(steps)) %>%
+  group_by(date) %>% 
+  summarize(TotalSteps=sum(steps))
+
+print(steps.sum)
+```
+
+## Make a histogram of the total number of steps taken each day
+```{r, echo=TRUE}
+s <- ggplot(steps.sum, aes(x = TotalSteps))  
+
+s + geom_histogram(fill = "blue",binwidth = 1000) +   labs(title = "Total Steps (by day)", x = "Total Steps",
+  y = "Frequency")
+```
+
+##Calculate and report the mean and median of the total number of steps taken per day
+
+```{r, echo=TRUE}
+mean(steps.sum$TotalSteps)
+
+median(steps.sum$TotalSteps)
+```
+
+##Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+
+```{r, echo=TRUE}
+act.no.na <- na.omit(activity.raw)
+
+fivemin.int <- act.no.na %>%
+  group_by(interval) %>%
+  summarize(aver.steps=mean(steps))
+
+s2 <- ggplot(fivemin.int, aes(x = interval, y = aver.steps)) 
+
+s2 + geom_line() + labs(title = "Average Steps Taken (by 5 min. interval)", x = "Interval", y = "Average Steps")
+```
+
+##Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+```{r, echo=TRUE, Warnings = FALSE}
+max_interv <- fivemin.int[which.max(fivemin.int$steps),1]
+
+fivemin.int$interval[which.max(fivemin.int$aver.steps)]
+```
+
+##Imputing missing values: examine the number of missing data on the steps variable
+
+```{r, echo=TRUE}
+md.pattern(activity.raw)
+```
+
+NOTE: There are 15264 complete observations, 2304 observations with missing steps data
+
+##Create a new dataset that is equal to the original dataset but with the missing data filled in.
+
+```{r, echo=TRUE}
+imputed.data <- activity.raw
+
+for (i in 1:nrow(imputed.data)) {
+  if (is.na(imputed.data$steps[i])) {
+    # Find the index value for when the interval matches the average
+    temp.d <- which(imputed.data$interval[i] == fivemin.int$interval)
+    # Assign the value to replace the NA
+    imputed.data$steps[i] <- fivemin.int[temp.d,]$aver.steps
+  }
+}
+```
+
+####Calculate and report the mean and median total number of steps taken per day.  
+####Do these values differ from the estimates from the first part of the assignment? What is the 
+####impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r, echo=TRUE}
+steps.sum.imp <- imputed.data %>% 
+  group_by(date) %>% 
+  summarize(TotalSteps=sum(steps))
+
+mean(steps.sum.imp$TotalSteps)
+
+median(steps.sum.imp$TotalSteps)
+
+```
+
+NOTE: mean is unchanged, but median is slightly changed and is now equal to the mean.
+
+##Make a histogram of the total number of steps taken each day 
+
+```{r, echo=TRUE}
+s3 <- ggplot(steps.sum.imp, aes(x = TotalSteps))  
+
+s3 + geom_histogram(fill = "blue",binwidth = 1000) +   labs(title = "Total Steps (by day)", x = "Total Steps", y = "Frequency")
+
+```
+
+##Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether
+##a given date is a weekday or weekend day.
+
+```{r, echo=TRUE}
+
+imputed.data$day <- weekdays(imputed.data$date)
+
+imputed.data$daytype[imputed.data$day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")] <- "weekday"
+
+imputed.data$daytype[imputed.data$day %in% c("Saturday", "Sunday")] <- "weekend"
+
+imputed.data$daytype <- as.factor(imputed.data$daytype)
+
+```
+
+####Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether
+####a given date is a weekday or weekend day.
+
+```{r, echo=TRUE}
+
+imputed.data$day <- weekdays(imputed.data$date)
+
+imputed.data$daytype[imputed.data$day %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")] <- "weekday"
+
+imputed.data$daytype[imputed.data$day %in% c("Saturday", "Sunday")] <- "weekend"
+
+imputed.data$daytype <- as.factor(imputed.data$daytype)
+
+```
+
+##Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) 
+##and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+```{r, echo=TRUE}
+fivemin.int.imp <- imputed.data %>%
+  group_by(daytype, interval)%>%
+  summarize(aver.steps=mean(steps))
+
+s4 <- ggplot(fivemin.int.imp, aes(x = interval, y = aver.steps)) 
+
+s4 + geom_line() + facet_grid(daytype ~ .) + labs(title = "Average Steps Taken (by 5 min. interval and day type)",
+    x = "Interval", y = "Average Steps")
+```
 
 
 
-## What is mean total number of steps taken per day?
 
 
 
-## What is the average daily activity pattern?
 
 
 
-## Imputing missing values
 
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
